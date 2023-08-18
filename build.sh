@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-
+# Typical commandline is following
+# => KERNEL_CONFIG=DEVELOPMENT ARCH_CONFIG=X86_64 REMOTE="strawberry@192.168.132.128:/Users/strawberry/p/" ./build.sh
 # CREDIT: https://github.com/pwn0rz/xnu-build
 
 set -o errexit
@@ -137,7 +138,7 @@ install_ipsw() {
 choose_xnu() {
     if [ -z "$MACOS_VERSION"]; then
         gum style --border normal --margin "1" --padding "1 2" --border-foreground 212 "Choose $(gum style --foreground 212 'macOS') version to build:"
-        MACOS_VERSION=$(gum choose "13.0" "13.1" "13.2" "13.3" "13.5")
+        MACOS_VERSION=$(gum choose "13.0" "13.1" "13.2" "13.3", "13.5")
     fi
     case ${MACOS_VERSION} in
     '13.0')
@@ -218,8 +219,8 @@ patches() {
     # libsyscall patch
     sed -i '' 's|^#include.*BSD.xcconfig.*||g' ${WORK_DIR}/xnu/libsyscall/Libsyscall.xcconfig
     # xnu build patch
-    sed -i '' 's|^LDFLAGS_KERNEL_SDK	= -L$(SDKROOT).*|LDFLAGS_KERNEL_SDK	= -L$(FAKEROOT_DIR)/usr/local/lib/kernel -lfirehose_kernel|g' ${WORK_DIR}/xnu/makedefs/MakeInc.def
-    sed -i '' 's|^INCFLAGS_SDK	= -I$(SDKROOT)|INCFLAGS_SDK	= -I$(FAKEROOT_DIR)|g' ${WORK_DIR}/xnu/makedefs/MakeInc.def
+    sed -i '' 's|^LDFLAGS_KERNEL_SDK    = -L$(SDKROOT).*|LDFLAGS_KERNEL_SDK     = -L$(FAKEROOT_DIR)/usr/local/lib/kernel -lfirehose_kernel|g' ${WORK_DIR}/xnu/makedefs/MakeInc.def
+    sed -i '' 's|^INCFLAGS_SDK  = -I$(SDKROOT)|INCFLAGS_SDK     = -I$(FAKEROOT_DIR)|g' ${WORK_DIR}/xnu/makedefs/MakeInc.def
     # Don't apply patches when building CodeQL database to keep code pure
     if [ "$CODEQL" -eq "0" ]; then
         git apply --directory='xnu' patches/*.patch || true
@@ -347,6 +348,12 @@ build_libdispatch() {
 }
 
 build_xnu() {
+    # Only supports developement now
+    if [ -f "${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE}" ]; then
+        info "🔥 Deleting ${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE}"
+        rm ${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE}
+        rm -rf ${BUILD_DIR}/xnu.obj/DEVELOPMENT_X86_64
+    fi
     if [ ! -f "${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE}" ]; then
         if [ "$JSONDB" -ne "0" ]; then
             running "📦 Building XNU kernel with JSON compilation database"
@@ -377,7 +384,7 @@ build_xnu() {
             OBJROOT=${BUILD_DIR}/xnu.obj
             SYMROOT=${BUILD_DIR}/xnu.sym
             cd ${SRCROOT}
-            make install -j8 SDKROOT=macosx TARGET_CONFIGS="$KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG" CONCISE=1 LOGCOLORS=y BUILD_WERROR=0 BUILD_LTO=0 SRCROOT=${SRCROOT} OBJROOT=${OBJROOT} SYMROOT=${SYMROOT} DSTROOT=${DSTROOT} FAKEROOT_DIR=${FAKEROOT_DIR} KDKROOT=${KDKROOT} BUILD_JSON_COMPILATION_DATABASE=1
+            make install -j8 SDKROOT=macosx TARGET_CONFIGS="$KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG" CONCISE=1 LOGCOLORS=y BUILD_WERROR=0 BUILD_LTO=0 SRCROOT=${SRCROOT} OBJROOT=${OBJROOT} SYMROOT=${SYMROOT} DSTROOT=${DSTROOT} FAKEROOT_DIR=${FAKEROOT_DIR} KDKROOT=${KDKROOT} BUILD_JSON_COMPILATION_DATABASE=0
             cd ${WORK_DIR}
         fi
     else
@@ -406,6 +413,19 @@ build_kc() {
             -x $(ipsw kernel kmutil inspect -x --filter ${KC_FILTER}) # this will skip KC_FILTER regex (and other KEXTs with them as dependencies)
             # -x $(kmutil inspect -V release --no-header | grep apple | grep -v "SEPHibernation" | awk '{print " -b "$1; }')
         echo "  🎉 KC Build Done!"
+    fi
+}
+
+remote_copy() {
+    if [[ -z "${REMOTE}" ]]; then
+        error "Can't find remtoe adddress, skipped!"
+    fi
+    info "📦 Sending ${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE} to ${REMOTE}"
+    scp ${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE} ${REMOTE}
+    if [ $? -ne 0 ]; then
+        error "Failed to send kernel.${KERNEL_TYPE} to ${REMOTE}, skipped!"
+    else
+        info "🎉 Succesfully send kernel.${KERNEL_TYPE} to ${REMOTE}"
     fi
 }
 
@@ -444,6 +464,7 @@ main() {
     build_libdispatch
     build_xnu
     echo "  🎉 XNU Build Done!"
+    remote_copy
     if [ "$BUILDKC" -ne "0" ]; then
         install_ipsw
         build_kc

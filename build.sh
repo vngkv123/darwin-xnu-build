@@ -137,7 +137,7 @@ install_ipsw() {
 choose_xnu() {
     if [ -z "$MACOS_VERSION"]; then
         gum style --border normal --margin "1" --padding "1 2" --border-foreground 212 "Choose $(gum style --foreground 212 'macOS') version to build:"
-        MACOS_VERSION=$(gum choose "13.0" "13.1" "13.2" "13.3")
+        MACOS_VERSION=$(gum choose "13.0" "13.1" "13.2" "13.3" "13.5")
     fi
     case ${MACOS_VERSION} in
     '13.0')
@@ -159,6 +159,11 @@ choose_xnu() {
         RELEASE_URL='https://raw.githubusercontent.com/apple-oss-distributions/distribution-macOS/macos-133/release.json'
         KDK_NAME='Kernel Debug Kit 13.3 build 22E252'
         KDKROOT='/Library/Developer/KDKs/KDK_13.3_22E252.kdk'
+        ;;
+    '13.5')
+        RELEASE_URL='https://raw.githubusercontent.com/apple-oss-distributions/distribution-macOS/macos-135/release.json'
+        KDK_NAME='Kernel Debug Kit 13.5 build 22G74'
+        KDKROOT='/Library/Developer/KDKs/KDK_13.5_22G74.kdk'
         ;;
     *)
         error "Invalid xnu version"
@@ -372,7 +377,7 @@ build_xnu() {
             OBJROOT=${BUILD_DIR}/xnu.obj
             SYMROOT=${BUILD_DIR}/xnu.sym
             cd ${SRCROOT}
-            make install -j8 SDKROOT=macosx TARGET_CONFIGS="$KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG" CONCISE=1 LOGCOLORS=y BUILD_WERROR=0 BUILD_LTO=0 SRCROOT=${SRCROOT} OBJROOT=${OBJROOT} SYMROOT=${SYMROOT} DSTROOT=${DSTROOT} FAKEROOT_DIR=${FAKEROOT_DIR} KDKROOT=${KDKROOT} BUILD_JSON_COMPILATION_DATABASE=0
+            make install -j8 SDKROOT=macosx TARGET_CONFIGS="$KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG" CONCISE=1 LOGCOLORS=y BUILD_WERROR=0 BUILD_LTO=0 SRCROOT=${SRCROOT} OBJROOT=${OBJROOT} SYMROOT=${SYMROOT} DSTROOT=${DSTROOT} FAKEROOT_DIR=${FAKEROOT_DIR} KDKROOT=${KDKROOT} BUILD_JSON_COMPILATION_DATABASE=1
             cd ${WORK_DIR}
         fi
     else
